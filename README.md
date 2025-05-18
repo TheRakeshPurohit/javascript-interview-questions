@@ -604,7 +604,6 @@
        }
        var object = new Person("Sudheer");
        ```
-
     5. **Function constructor with prototype:**
 
        This is similar to function constructor but it uses prototype for their properties and methods. Using prototype means you're sharing methods/properties across instances, which saves memory and improve performance.
@@ -675,13 +674,32 @@
 
        A Singleton is an object which can only be instantiated one time. Repeated calls to its constructor return the same instance. This way one can ensure that they don't accidentally create multiple instances.
 
-       ```javascript
-       var object = new (function () {
-         this.name = "Sudheer";
-       })();
-       ```
+        ##### Singleton with Closure (Classic JS Pattern)
+        ```javascript
+        const Singleton = (function () {
+        let instance;
 
-      In modern apps, Singletons are often implemented using **modules** or **closures**.
+        function createInstance() {
+          return { name: "Sudheer" };
+        }
+
+        return {
+          getInstance: function () {
+            if (!instance) {
+              instance = createInstance();
+            }
+            return instance;
+          }
+        };
+        })();
+
+        // Usage
+        const obj1 = Singleton.getInstance();
+        const obj2 = Singleton.getInstance();
+
+        console.log(obj1 === obj2); // true
+        ```
+         In modern JavaScript applications, singletons are commonly implemented using ES6 modules for their built-in caching behavior, or closures for encapsulated state management.
 
       **[⬆ Back to Top](#table-of-contents)**
 
