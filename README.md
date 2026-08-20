@@ -95,8 +95,9 @@
 | 63 | [What is callback in callback](#what-is-callback-in-callback) |
 | 64 | [What is promise chaining](#what-is-promise-chaining) |
 | 65 | [What is promise.all](#what-is-promiseall) |
-| 66 | [What is the purpose of the race method in promise](#what-is-the-purpose-of-the-race-method-in-promise) |
-| 67 | [What is a strict mode in javascript](#what-is-a-strict-mode-in-javascript) |
+| 66 | [Does Promise.all() cancel the other Promises?](#does-promiseall-cancel-the-other-promises) |
+| 67 | [What is the purpose of the race method in promise](#what-is-the-purpose-of-the-race-method-in-promise) |
+| 68 | [What is a strict mode in javascript](#what-is-a-strict-mode-in-javascript) |
 | 68 | [Why do you need strict mode](#why-do-you-need-strict-mode) |
 | 69 | [How do you declare strict mode](#how-do-you-declare-strict-mode) |
 | 70 | [What is the purpose of double exclamation](#what-is-the-purpose-of-double-exclamation) |
@@ -2018,17 +2019,131 @@ Because of hoisting, functions can be used before they are declared.
 
 65. ### What is promise.all
 
-    Promise.all is a promise that takes an array of promises as an input (an iterable), and it gets resolved when all the promises get resolved or any one of them gets rejected. For example, the syntax of promise.all method is below,
+    `Promise.all()` is a built-in JavaScript method used to handle multiple asynchronous operations together. It accepts an iterable of promises (usually an array) and returns a single promise that resolves only when all the input promises have successfully resolved.
+
+    If any one of the promises rejects, the whole `Promise.all()` call rejects immediately and the error is passed to the `.catch()` block. The result array contains values in the same order as the input promises, even if they finish at different times.
 
     ```javascript
-    Promise.all([Promise1, Promise2, Promise3]) .then(result) => {   console.log(result) }) .catch(error => console.log(`Error in promises ${error}`))
+    const fetchUser = () => Promise.resolve({ id: 1, name: "John" });
+    const fetchOrders = () =>
+      new Promise((resolve) => setTimeout(() => resolve([101, 102]), 200));
+    const fetchProfile = () => Promise.resolve("active");
+
+    Promise.all([fetchUser(), fetchOrders(), fetchProfile()])
+      .then(([user, orders, status]) => {
+        console.log(user); // { id: 1, name: 'John' }
+        console.log(orders); // [101, 102]
+        console.log(status); // 'active'
+      })
+      .catch((error) => {
+        console.log("One of the requests failed:", error);
+      });
     ```
 
-    **Note:** Remember that the order of the promises(output the result) is maintained as per input order.
+    Let's consider a case where one promise rejects:
+
+    ```javascript
+    Promise.all([
+      Promise.resolve("A"),
+      Promise.reject(new Error("Request failed")),
+      Promise.resolve("C"),
+    ])
+      .then((values) => console.log(values))
+      .catch((error) => console.log(error.message)); // Request failed
+    ```
+
+    **Key points:**
+
+    1. It waits for all promises to resolve.
+    2. It rejects as soon as any promise fails.
+    3. The output order matches the input order, not the completion order.
+    4. Non-promise values are treated as resolved values automatically.
+
+    `Promise.all()` is useful when you need to run multiple independent async tasks concurrently and continue only after all of them are done, such as fetching multiple API endpoints together.
 
     **[⬆ Back to Top](#table-of-contents)**
 
-66. ### What is the purpose of the race method in promise
+66. ### Does Promise.all() cancel the other Promises?
+
+    No. `Promise.all()` does not cancel the other promises. It only waits for all of them to finish, and if any one rejects, the overall `Promise.all()` call rejects immediately.
+
+    A JavaScript promise does not have a built-in cancel API. Once a promise starts, it keeps running unless the underlying async operation supports cancellation on its own. For example, `fetch()` supports cancellation using `AbortController`.
+
+    ```javascript
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    const requestA = fetch("/api/a", { signal });
+    const requestB = Promise.reject(new Error("Server error"));
+    const requestC = fetch("/api/c", { signal });
+
+    Promise.all([requestA, requestB, requestC])
+      .then((results) => console.log(results))
+      .catch((error) => {
+        console.log("Promise.all rejected:", error.message);
+        controller.abort(); // Cancels the fetch requests still in progress
+      });
+    ```
+
+    In the example above, if `requestB` rejects, `Promise.all()` rejects, but `requestA` and `requestC` are not automatically canceled. They continue unless you explicitly abort them using the underlying API or custom logic.
+
+    **How to cancel async work:**
+
+    1. Use an API that supports cancellation, such as `fetch()` with `AbortController`.
+    2. For custom promises, you can add a `cancel()` method or a flag to stop work internally.
+    3. If the work is not cancelable, the promise cannot be truly canceled from outside.
+
+    **Note:** `Promise.all()` is about aggregation, not cancellation. It waits for all promises to settle, but it does not stop the other async operations by itself.
+
+    **[⬆ Back to Top](#table-of-contents)**
+
+### What is the difference between `return` and `return await` in async functions
+
+    In an `async` function, `return value` simply returns the value or promise. If the value is a rejected promise, the rejection is not caught by a surrounding `try/catch` unless you `await` it first.
+
+    `return await value` pauses the function until the promise settles, so a `try/catch` around it can handle errors properly.
+
+    ```javascript
+    async function withoutAwait() {
+      try {
+        return Promise.reject(new Error("Something failed"));
+      } catch (error) {
+        console.log("This will not run");
+        return "fallback";
+      }
+    }
+
+    async function withAwait() {
+      try {
+        return await Promise.reject(new Error("Something failed"));
+      } catch (error) {
+        console.log("Caught inside the function:", error.message);
+        return "fallback";
+      }
+    }
+
+    withoutAwait().catch((err) => console.log("outside catch:", err.message));
+    withAwait().then((value) => console.log("withAwait result:", value));
+    ```
+
+    Output:
+
+    ```javascript
+    outside catch: Something failed
+    Caught inside the function: Something failed
+    withAwait result: fallback
+    ```
+
+    In short:
+
+    - `return promise` returns the promise without waiting for it.
+    - `return await promise` waits for the promise and allows the surrounding `try/catch` to catch errors.
+
+    `return await` is especially useful when you want to clean up or handle the error inside the same async function before it exits.
+
+    **[⬆ Back to Top](#table-of-contents)**
+
+67. ### What is the purpose of the race method in promise
 
     Promise.race() method will return the promise instance which is firstly resolved or rejected. Let's take an example of race() method where promise2 is resolved first
 
@@ -2641,7 +2756,7 @@ Because of hoisting, functions can be used before they are declared.
 
 110. ### What is an event delegation
 
-      Event delegation is a technique for listening to events where you delegate a parent element as the listener for all of the events that happen inside it.
+      Event delegation is a technique where you attach **one event listener to a parent element** instead of adding listeners to each child element. It works because events bubble up from the target element to its parents.
 
       For example, if you wanted to detect field changes inside a specific form, you can use event delegation technique,
 
@@ -17022,6 +17137,66 @@ console.log(xorAccumulator);
 This question is really showcasing how JavaScript mixes array reduction with low-level bitwise tricks. The code first uses .reduce() to turn the array into a single value by counting how many elements are odd, then an IIFE immediately kicks in and loops through the array again, shifting each number left by its index and XOR-ing it into the accumulator. The whole vibe is about understanding how reduction works for summarizing arrays and how bit shifting plus XOR can transform values in a way that feels mathematical rather than typical JS.
 </p>
 </details>
+
+**[⬆ Back to Top](#table-of-contents)**
+
+#### 87. What will be the output of this code, and how would you modify it to get the actual user data instead of an array of Promises?
+
+```javascript
+const ids = [1, 2, 3];
+
+const users = ids.map(async (id) => {
+  return await getUser(id);
+});
+
+console.log(users);
+```
+
+<details><summary><b>Answer</b></summary>
+<p>
+
+##### Answer
+
+The output will be an array of Promise objects, not the actual user data.
+
+```javascript
+[Promise { <pending> }, Promise { <pending> }, Promise { <pending> }]
+```
+
+This happens because `Array.map()` does not wait for the async callback to resolve. Each `async` function returns a Promise immediately, so `users` becomes an array of Promises.
+
+To get the actual user data, you need to wait for all the promises to resolve using `Promise.all()`:
+
+```javascript
+const ids = [1, 2, 3];
+
+const users = await Promise.all(
+  ids.map(async (id) => {
+    return await getUser(id);
+  })
+);
+
+console.log(users);
+```
+
+If you are not inside an async function, use:
+
+```javascript
+const ids = [1, 2, 3];
+
+Promise.all(
+  ids.map(async (id) => getUser(id))
+).then((users) => {
+  console.log(users);
+});
+```
+
+The key idea is that `async` functions always return Promises, so you must resolve them using `await` or `Promise.all()` to get the final values.
+
+</p>
+</details>
+
+---
 
 **[⬆ Back to Top](#table-of-contents)**
 
